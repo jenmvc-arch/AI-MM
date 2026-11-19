@@ -1,0 +1,2 @@
+export type ApiError = { code: string; message: string; details?: unknown; requestId: string };
+export function errorResponse(code: string, message: string, details?: unknown, status?: number) { return Response.json({ code, message, details, requestId: crypto.randomUUID() } satisfies ApiError, { status: status ?? (code === "UNAUTHENTICATED" ? 401 : code === "FORBIDDEN" ? 403 : code === "VALIDATION_ERROR" ? 400 : 500) }); }
