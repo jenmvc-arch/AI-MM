@@ -18,11 +18,19 @@ export async function POST(request: Request, context: Context) {
   try {
     const { query, results } = await searchCompetitor(competitor.name, competitor.website_url, competitor.positioning, competitor.offers);
     const { observation, sourceUrl, model } = await inspectCompetitor(competitor.name, query, results);
+    const snapshotObservation = {
+      positioning: observation.positioning,
+      offers: observation.offers,
+      pricing: observation.pricing,
+      messaging: observation.messaging,
+      channels: observation.channels,
+      evidence: observation.evidence,
+    };
     const { data: previous } = await supabase.from("competitor_snapshots").select("id, content_hash, positioning, offers, pricing, messaging").eq("competitor_id", competitorId).order("observed_at", { ascending: false }).limit(1).maybeSingle();
-    const hash = createHash("sha256").update(observationHash(observation)).digest("hex");
+    const hash = createHash("sha256").update(observationHash(snapshotObservation)).digest("hex");
     const changed = previous && previous.content_hash !== hash;
-    const changeSummary = changed ? ["Positioning", "offers", "pricing", "messaging"].filter((key) => previous[key as keyof typeof previous] !== observation[key as keyof typeof observation]).join(", ") + " changed from the previous observed snapshot." : null;
-    const { data: snapshot, error: saveError } = await supabase.from("competitor_snapshots").insert({ ...observation, organization_id: competitor.organization_id, workspace_id: workspaceId, competitor_id: competitorId, source_url: sourceUrl, source_type: "tavily_search", content_hash: hash, change_summary: changeSummary, created_by: user.id }).select("id, source_url, source_type, observed_at, positioning, offers, pricing, messaging, channels, evidence, content_hash, change_summary").single();
+    const changeSummary = changed ? ["positioning", "offers", "pricing", "messaging"].filter((key) => previous[key as keyof typeof previous] !== snapshotObservation[key as keyof typeof snapshotObservation]).join(", ") + " changed from the previous observed snapshot." : null;
+    const { data: snapshot, error: saveError } = await supabase.from("competitor_snapshots").insert({ ...snapshotObservation, organization_id: competitor.organization_id, workspace_id: workspaceId, competitor_id: competitorId, source_url: sourceUrl, source_type: "tavily_search", content_hash: hash, change_summary: changeSummary, created_by: user.id }).select("id, source_url, source_type, observed_at, positioning, offers, pricing, messaging, channels, evidence, content_hash, change_summary").single();
     if (saveError || !snapshot) return errorResponse("DATABASE_ERROR", "Could not save competitor observation.");
     for (const source of results) {
       const { error: contentError } = await supabase.from("competitor_content").insert({ organization_id: competitor.organization_id, workspace_id: workspaceId, competitor_id: competitorId, snapshot_id: snapshot.id, source_url: source.url, content_type: "website", title: source.title, body: source.content, created_by: user.id });

@@ -79,6 +79,18 @@ describe("Phase 1 tenant policies", () => {
       insert into public.competitor_snapshots(organization_id, workspace_id, competitor_id, source_url, source_type, positioning, content_hash) values
         ('${orgA}', '${wsA}', 'f0000000-0000-4000-8000-00000000000f', 'https://example.com/competitor-a', 'user_provided', 'Positioning A', 'hash-a'),
         ('${orgB}', '${wsB}', '10000000-0000-4000-8000-000000000010', 'https://example.com/competitor-b', 'user_provided', 'Positioning B', 'hash-b');
+      insert into public.competitor_content(organization_id, workspace_id, competitor_id, source_url, content_type, body, created_by) values
+        ('${orgA}', '${wsA}', 'f0000000-0000-4000-8000-00000000000f', 'https://example.com/a-copy', 'website', 'Competitor A public copy', '${userA}'),
+        ('${orgB}', '${wsB}', '10000000-0000-4000-8000-000000000010', 'https://example.com/b-copy', 'website', 'Competitor B public copy', '${userB}');
+      insert into public.copy_analyses(organization_id, workspace_id, input_copy, analysis_json, model, created_by) values
+        ('${orgA}', '${wsA}', 'A supplied marketing copy example', '{"hook":"A"}', 'test-model', '${userA}'),
+        ('${orgB}', '${wsB}', 'B supplied marketing copy example', '{"hook":"B"}', 'test-model', '${userB}');
+      insert into public.marketing_strategies(organization_id, workspace_id, brand_id, title, strategy_json, model, created_by, updated_by) values
+        ('${orgA}', '${wsA}', '70000000-0000-4000-8000-000000000007', 'Strategy A', '{"plan":"A"}', 'test-model', '${userA}', '${userA}'),
+        ('${orgB}', '${wsB}', '80000000-0000-4000-8000-000000000008', 'Strategy B', '{"plan":"B"}', 'test-model', '${userB}', '${userB}');
+      insert into public.monitoring_schedules(organization_id, workspace_id, competitor_id, interval_hours, created_by) values
+        ('${orgA}', '${wsA}', 'f0000000-0000-4000-8000-00000000000f', 168, '${userA}'),
+        ('${orgB}', '${wsB}', '10000000-0000-4000-8000-000000000010', 168, '${userB}');
     `);
   });
 
@@ -174,9 +186,20 @@ describe("Phase 1 tenant policies", () => {
     const visible = await asUser(userA, async () => {
       const competitors = await db.query("select name from public.competitors order by name");
       const snapshots = await db.query("select positioning from public.competitor_snapshots order by positioning");
-      return { competitors: competitors.rows, snapshots: snapshots.rows };
+      const content = await db.query("select body from public.competitor_content order by body");
+      const analyses = await db.query("select input_copy from public.copy_analyses order by input_copy");
+      const strategies = await db.query("select title from public.marketing_strategies order by title");
+      const schedules = await db.query("select competitor_id from public.monitoring_schedules order by competitor_id");
+      return { competitors: competitors.rows, snapshots: snapshots.rows, content: content.rows, analyses: analyses.rows, strategies: strategies.rows, schedules: schedules.rows };
     });
-    expect(visible).toEqual({ competitors: [{ name: "Competitor A" }], snapshots: [{ positioning: "Positioning A" }] });
+    expect(visible).toEqual({
+      competitors: [{ name: "Competitor A" }],
+      snapshots: [{ positioning: "Positioning A" }],
+      content: [{ body: "Competitor A public copy" }],
+      analyses: [{ input_copy: "A supplied marketing copy example" }],
+      strategies: [{ title: "Strategy A" }],
+      schedules: [{ competitor_id: "f0000000-0000-4000-8000-00000000000f" }],
+    });
   });
 
   it("denies a viewer from creating competitor content", async () => {

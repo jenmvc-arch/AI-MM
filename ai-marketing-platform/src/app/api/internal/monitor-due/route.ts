@@ -20,11 +20,19 @@ export async function POST(request: Request) {
     try {
       const { query, results } = await searchCompetitor(competitor.name, competitor.website_url, competitor.positioning, competitor.offers);
       const { observation, sourceUrl } = await inspectCompetitor(competitor.name, query, results);
+      const snapshotObservation = {
+        positioning: observation.positioning,
+        offers: observation.offers,
+        pricing: observation.pricing,
+        messaging: observation.messaging,
+        channels: observation.channels,
+        evidence: observation.evidence,
+      };
       const { data: previous } = await supabase.from("competitor_snapshots").select("id, content_hash, positioning, offers, pricing, messaging").eq("competitor_id", competitor.id).order("observed_at", { ascending: false }).limit(1).maybeSingle();
-      const hash = createHash("sha256").update(observationHash(observation)).digest("hex");
+      const hash = createHash("sha256").update(observationHash(snapshotObservation)).digest("hex");
       const changed = previous && previous.content_hash !== hash;
       const changeSummary = changed ? "A public marketing observation changed since the previous refresh." : null;
-      const { data: snapshot, error: saveError } = await supabase.from("competitor_snapshots").insert({ ...observation, organization_id: schedule.organization_id, workspace_id: schedule.workspace_id, competitor_id: competitor.id, source_url: sourceUrl, source_type: "tavily_search", content_hash: hash, change_summary: changeSummary }).select("id").single();
+      const { data: snapshot, error: saveError } = await supabase.from("competitor_snapshots").insert({ ...snapshotObservation, organization_id: schedule.organization_id, workspace_id: schedule.workspace_id, competitor_id: competitor.id, source_url: sourceUrl, source_type: "tavily_search", content_hash: hash, change_summary: changeSummary }).select("id").single();
       if (saveError || !snapshot) throw new Error("Snapshot save failed");
       for (const source of results) {
         const { error: contentError } = await supabase.from("competitor_content").insert({ organization_id: schedule.organization_id, workspace_id: schedule.workspace_id, competitor_id: competitor.id, snapshot_id: snapshot.id, source_url: source.url, content_type: "website", title: source.title, body: source.content, created_by: schedule.created_by });
